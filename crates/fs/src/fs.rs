@@ -301,7 +301,13 @@ impl FileHandle for std::fs::File {
 
         let fd = self.as_fd();
         let mut kif = MaybeUninit::<libc::kinfo_file>::uninit();
-        kif.kf_structsize = libc::KINFO_FILE_SIZE;
+        // SAFETY: `kf_structsize` is the first field in `kinfo_file` which is
+        // `#[repr(C)]`, therefore we don't need to offset the pointer to write to it.
+        unsafe {
+            kif.as_mut_ptr()
+                .cast::<libc::c_int>()
+                .write(libc::KINFO_FILE_SIZE)
+        };
 
         let result = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_KINFO, kif.as_mut_ptr()) };
         if result == -1 {

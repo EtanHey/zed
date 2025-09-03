@@ -966,21 +966,32 @@ where
         const CODE_BLOCK_DELIMITER: &str = "```";
         const CURSOR_SPAN: &str = "<|CURSOR|>";
 
-        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: We never move out of the pinned value.
+        let this_ptr = unsafe { &raw mut *self.get_unchecked_mut() };
         loop {
-            if !this.stream_done {
-                let mut stream = unsafe { Pin::new_unchecked(&mut this.stream) };
+            // SAFETY: The whole of `*self` is unaliased outside the body of the block.
+            if unsafe { !(&*this_ptr).stream_done } {
+                // SAFETY: This field is never accessed elsewhere.
+                let mut stream = unsafe { Pin::new_unchecked(&mut (*this_ptr).stream) };
                 match stream.as_mut().poll_next(cx) {
                     Poll::Ready(Some(Ok(chunk))) => {
-                        this.buffer.push_str(&chunk);
+                        // SAFETY: This field is unaliased.
+                        // TODO: Run this through Miri, it's still a little dubious
+                        // (but spamming `offset_of!` calls would make for unreadable code).
+                        unsafe { (*this_ptr).buffer.push_str(&chunk) };
                     }
                     Poll::Ready(Some(Err(error))) => return Poll::Ready(Some(Err(error))),
                     Poll::Ready(None) => {
-                        this.stream_done = true;
+                        // SAFETY: This field is unaliased.
+                        unsafe { (*this_ptr).stream_done = true };
                     }
                     Poll::Pending => return Poll::Pending,
                 }
             }
+
+            // Only create the real reference after the pin magic is done.
+            // SAFETY: No outstanding references to any part of `self` exist.
+            let this = unsafe { &mut *this_ptr };
 
             let mut chunk = String::new();
             let mut consumed = 0;
