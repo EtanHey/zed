@@ -13902,7 +13902,6 @@ dependencies = [
  "rtrb",
  "symphonia",
  "thiserror 2.0.12",
- "tracing",
 ]
 
 [[package]]
